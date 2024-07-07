@@ -14,6 +14,8 @@
         <script src="https://cdn.jsdelivr.net/npm/prismjs/prism.min.js"></script>
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
     </head>
@@ -63,15 +65,21 @@
 
             function saveContent(editor) {
                 const today = new Date();
-                var fileName = "font-" + today.getTime();
+                var fileName = "fong-" + today.getTime();
                 saveTxt(editor.value(), fileName + ".md");
+                exportPdf(editor, fileName + ".pdf");
             }
-
-            function exportToPdf() {
-                var htmlContent = easyMDE.markdown(easyMDE.value());
-                var pdf = new jsPDF();
-                pdf.text(htmlContent, 10, 10);
-                pdf.save("exported-text.pdf");
+            
+            window.jsPDF = window.jspdf.jsPDF;
+            function exportPdf(editor, fileName) {
+                var htmlContent = editor.markdown(editor.value());
+                var pdf = new jsPDF('p', 'px', 'a4');
+                pdf.html(htmlContent, {
+                    callback: function (pdf) {
+                        pdf.save(fileName);
+                    },
+                    margin: [20, 25, 20, 25]
+                });
             }
         </script>
 
