@@ -1,45 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Markdown Editor</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
-<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism.css">
-<script src="https://cdn.jsdelivr.net/npm/prismjs/prism.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
-</head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Markdown Editor</title>
+
+        <link rel="icon" href="./magnum.ico" type="image/x-icon">
+
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+        <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism.css">
+        <script src="https://cdn.jsdelivr.net/npm/prismjs/prism.min.js"></script>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+    </head>
     <body>
 
-    <textarea id="editor"></textarea>
+        <textarea id="editor"></textarea>
 
-    <script>
-        var easyMDE = new EasyMDE({
-            element: document.getElementById('editor'),
-            minHeight: "80vh",
-            toolbar: ["bold", "italic", "heading", "|", "quote", "|", "unordered-list", "ordered-list", 
-                "|", "image", "upload-image", "table", "code", "|", "preview", "side-by-side", "fullscreen", "|",
-                "|", "undo", "redo", "|", "guide"
-            ],
-            autofocus: true,
-            autosave: {
-                enabled: true,
-                uniqueId: "fong20240706"
-            },
-            lineNumbers: true,
-            spellChecker: false,
-            tabSize: 4,
-            preview: true
-        });
-        easyMDE.toggleSideBySide();
-        function exportToPdf() {
-            var htmlContent = easyMDE.markdown(easyMDE.value());
-            var pdf = new jsPDF();
-            pdf.text(htmlContent, 10, 10);
-            pdf.save("exported-text.pdf");
-        }
-    </script>
+        <script>
+            var easyMDE = new EasyMDE({
+                element: document.getElementById('editor'),
+                minHeight: "80vh",
+                toolbar: ["bold", "italic", "heading", "|", "quote", "|", "unordered-list", "ordered-list", 
+                    "|", "image", "upload-image", "table", "code", "|", "preview", "side-by-side", "fullscreen", "|",
+                    "|", "undo", "redo", "|", 
+                    {
+                        name: "save",
+                        action: (editor) => saveContent(editor),
+                        className: "fa-solid fa-floppy-disk",
+                        title: "Save Markdown"
+                    },
+                    "|", "guide"
+                ],
+                autofocus: true,
+                autosave: {
+                    enabled: true,
+                    uniqueId: "fong20240706"
+                },
+                lineNumbers: true,
+                spellChecker: false,
+                tabSize: 4,
+                preview: true
+            });
+            easyMDE.toggleSideBySide();
+
+            function saveTxt(text, fileName) {
+                var blob = new Blob([text], {type: 'text/plain'});
+                var url = window.URL.createObjectURL(blob);
+                var link = document.createElement("a");
+                link.style.display = "none";
+                link.href = url;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            }
+
+            function saveContent(editor) {
+                const today = new Date();
+                var fileName = "font-" + today.getTime();
+                console.log(editor.value());
+                saveTxt(editor.value(), fileName + ".md");
+            }
+
+            function exportToPdf() {
+                var htmlContent = easyMDE.markdown(easyMDE.value());
+                var pdf = new jsPDF();
+                pdf.text(htmlContent, 10, 10);
+                pdf.save("exported-text.pdf");
+            }
+        </script>
 
     </body>
 </html>
