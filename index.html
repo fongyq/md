@@ -10,8 +10,11 @@
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
         <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
 
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism.css">
-        <script src="https://cdn.jsdelivr.net/npm/prismjs/prism.min.js"></script>
+        <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism.css">
+        <script src="https://cdn.jsdelivr.net/npm/prismjs/prism.min.js"></script> -->
+
+        <script src="https://cdn.jsdelivr.net/highlight.js/latest/highlight.min.js"></script>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/highlight.js/latest/styles/github.min.css">
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
@@ -42,6 +45,9 @@
                 autosave: {
                     enabled: true,
                     uniqueId: "fong20240706"
+                },
+                renderingConfig: {
+                    codeSyntaxHighlighting: true // 启用代码高亮
                 },
                 lineNumbers: true,
                 spellChecker: false,
