@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown Editor</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism.css">
+<script src="https://cdn.jsdelivr.net/npm/prismjs/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+</head>
+    <body>
+
+    <textarea id="editor"></textarea>
+
+    <script>
+        var easyMDE = new EasyMDE({
+            element: document.getElementById('editor'),
+            minHeight: "80vh",
+            toolbar: ["bold", "italic", "heading", "|", "quote", "|", "unordered-list", "ordered-list", 
+                "|", "image", "upload-image", "table", "code", "|", "preview", "side-by-side", "fullscreen", "|",
+                "|", "undo", "redo", "|", "guide"
+            ],
+            autofocus: true,
+            autosave: {
+                enabled: true,
+            },
+            spellChecker: false,
+            tabSize: 4,
+            preview: true
+        });
+        easyMDE.toggleSideBySide();
+        function exportToPdf() {
+            var htmlContent = easyMDE.markdown(easyMDE.value());
+            var pdf = new jsPDF();
+            pdf.text(htmlContent, 10, 10);
+            pdf.save("exported-text.pdf");
+        }
+    </script>
+
+    </body>
+</html>
