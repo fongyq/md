@@ -64,7 +64,6 @@
             function saveContent(editor) {
                 const today = new Date();
                 var fileName = "font-" + today.getTime();
-                console.log(editor.value());
                 saveTxt(editor.value(), fileName + ".md");
             }
 
