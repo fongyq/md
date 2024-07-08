@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Markdown Editor</title>
+        <title>markdown</title>
 
         <link rel="icon" href="./magnum.ico" type="image/x-icon">
 
@@ -83,7 +83,7 @@
                 const today = new Date();
                 var fileName = "fong-" + today.getTime();
                 saveTxt(editor.value(), fileName + ".md");
-                exportPdf(editor, fileName + ".pdf");
+                // exportPdf(editor, fileName + ".pdf");
             }
             
             window.jsPDF = window.jspdf.jsPDF;
@@ -94,8 +94,8 @@
                     callback: function (pdf) {
                         pdf.save(fileName);
                     },
-                    autoPaging: 'text',
-                    // margin: [20, 25]
+                    // autoPaging: 'text',
+                    margin: [20, 25]
                 });
             }
         </script>
