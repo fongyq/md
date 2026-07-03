@@ -29,6 +29,32 @@
             div {
                 font-family: Menlo, 'Droid Sans Mono', Consolas, monospace;
             }
+            .pdf-export-root {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+            }
+            .pdf-export-root pre {
+                white-space: pre-wrap;
+                background: #f6f8fa;
+                padding: 12px;
+                border-radius: 6px;
+                overflow-x: auto;
+            }
+            .pdf-export-root code {
+                font-family: Menlo, 'Droid Sans Mono', Consolas, monospace;
+            }
+            .pdf-export-root img {
+                max-width: 100%;
+                height: auto;
+            }
+            .pdf-export-root table {
+                border-collapse: collapse;
+                width: 100%;
+            }
+            .pdf-export-root th,
+            .pdf-export-root td {
+                border: 1px solid #dfe2e5;
+                padding: 6px 13px;
+            }
         </style>
     </head>
     <body>
@@ -46,7 +72,22 @@
                         name: "save",
                         action: (editor) => saveContent(editor),
                         className: "fa-solid fa-floppy-disk",
-                        title: "Save Markdown"
+                        title: "Save Markdown",
+                        noDisable: true
+                    },
+                    {
+                        name: "export-pdf",
+                        action: (editor) => handleExport(editor, "pdf"),
+                        className: "fa-solid fa-file-pdf",
+                        title: "Export PDF",
+                        noDisable: true
+                    },
+                    {
+                        name: "export-html",
+                        action: (editor) => handleExport(editor, "html"),
+                        className: "fa-solid fa-file-code",
+                        title: "Export HTML",
+                        noDisable: true
                     },
                     "|", "guide"
                 ],
@@ -66,8 +107,20 @@
             });
             easyMDE.toggleSideBySide();
 
-            function saveTxt(text, fileName) {
-                var blob = new Blob([text], {type: 'text/plain'});
+            var exportLock = Promise.resolve();
+
+            function withExportLock(fn) {
+                var next = exportLock.then(fn, fn);
+                exportLock = next.catch(function () {});
+                return next;
+            }
+
+            function getExportFileName(ext) {
+                return "fong-" + Date.now() + ext;
+            }
+
+            function downloadBlob(content, fileName, mimeType) {
+                var blob = new Blob([content], {type: mimeType});
                 var url = window.URL.createObjectURL(blob);
                 var link = document.createElement("a");
                 link.style.display = "none";
@@ -79,24 +132,375 @@
                 window.URL.revokeObjectURL(url);
             }
 
-            function saveContent(editor) {
-                const today = new Date();
-                var fileName = "fong-" + today.getTime();
-                saveTxt(editor.value(), fileName + ".md");
-                // exportPdf(editor, fileName + ".pdf");
+            function saveTxt(text, fileName) {
+                downloadBlob(text, fileName, "text/plain");
             }
-            
-            window.jsPDF = window.jspdf.jsPDF;
-            function exportPdf(editor, fileName) {
-                var htmlContent = editor.markdown(editor.value());
-                var pdf = new jsPDF('p', 'px', 'a4');
-                pdf.html(htmlContent, {
-                    callback: function (pdf) {
-                        pdf.save(fileName);
-                    },
-                    // autoPaging: 'text',
-                    margin: [20, 25]
+
+            function saveContent(editor) {
+                saveTxt(editor.value(), getExportFileName(".md"));
+            }
+
+            function handleExport(editor, type) {
+                return withExportLock(function () {
+                    var fileName = getExportFileName(type === "pdf" ? ".pdf" : ".html");
+                    return type === "pdf"
+                        ? exportPdf(editor, fileName)
+                        : exportHtml(editor, fileName);
                 });
+            }
+
+            function getSanitizedHtml(editor) {
+                return DOMPurify.sanitize(editor.markdown(editor.value()), {
+                    ADD_TAGS: ["iframe"],
+                    ADD_ATTR: ["target", "rel"]
+                });
+            }
+
+            window.jsPDF = window.jspdf.jsPDF;
+            window.html2canvas = html2canvas;
+
+            var PDF_MARGIN = 56;
+            var PDF_CANVAS_SCALE = 2;
+
+            function getPdfContentWidthPx() {
+                return Math.floor((595.28 - PDF_MARGIN * 2) * 96 / 72);
+            }
+
+            function buildPdfContainer(htmlContent) {
+                var contentWidthPx = getPdfContentWidthPx();
+                var container = document.createElement("div");
+                container.className = "pdf-export-root";
+                container.innerHTML = htmlContent;
+                container.querySelectorAll("pre code").forEach(function (block) {
+                    hljs.highlightElement(block);
+                });
+                container.style.cssText = [
+                    "position:fixed",
+                    "left:0",
+                    "top:0",
+                    "width:" + contentWidthPx + "px",
+                    "padding:0",
+                    "box-sizing:border-box",
+                    "background:#fff",
+                    "color:#24292e",
+                    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+                    "font-size:14px",
+                    "line-height:1.6",
+                    "z-index:2147483647",
+                    "pointer-events:none",
+                    "overflow:visible"
+                ].join(";");
+                return container;
+            }
+
+            function waitForLayout() {
+                return new Promise(function (resolve) {
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(resolve);
+                    });
+                });
+            }
+
+            function waitForImages(container) {
+                var images = container.querySelectorAll("img");
+                return Promise.all(Array.prototype.map.call(images, function (img) {
+                    if (img.complete) {
+                        return Promise.resolve();
+                    }
+                    return new Promise(function (resolve) {
+                        img.onload = img.onerror = resolve;
+                    });
+                }));
+            }
+
+            function measureLines(el, containerRect) {
+                var lines = [];
+                var range = document.createRange();
+                var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+                var textNode;
+
+                while (textNode = walker.nextNode()) {
+                    if (!textNode.textContent.trim()) {
+                        continue;
+                    }
+                    range.selectNodeContents(textNode);
+                    var rects = range.getClientRects();
+                    for (var i = 0; i < rects.length; i++) {
+                        var rect = rects[i];
+                        if (rect.height < 1) {
+                            continue;
+                        }
+                        lines.push({
+                            top: rect.top - containerRect.top,
+                            bottom: rect.bottom - containerRect.top,
+                            height: rect.height
+                        });
+                    }
+                }
+
+                if (lines.length === 0) {
+                    var box = el.getBoundingClientRect();
+                    if (box.height >= 1) {
+                        lines.push({
+                            top: box.top - containerRect.top,
+                            bottom: box.bottom - containerRect.top,
+                            height: box.height
+                        });
+                    }
+                }
+
+                lines.sort(function (a, b) {
+                    return a.top - b.top;
+                });
+
+                var merged = [];
+                lines.forEach(function (line) {
+                    var last = merged[merged.length - 1];
+                    if (last && Math.abs(last.top - line.top) < 3) {
+                        last.bottom = Math.max(last.bottom, line.bottom);
+                        last.height = last.bottom - last.top;
+                    } else {
+                        merged.push({
+                            top: line.top,
+                            bottom: line.bottom,
+                            height: line.bottom - line.top
+                        });
+                    }
+                });
+                return merged;
+            }
+
+            var PDF_ATOMIC_TAGS = {img: 1, hr: 1, figure: 1, table: 1};
+            var PDF_LINE_TAGS = {
+                p: 1, li: 1, td: 1, th: 1, blockquote: 1,
+                h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, pre: 1
+            };
+
+            function collectPageUnits(container, maxPageHeight) {
+                var containerRect = container.getBoundingClientRect();
+                var units = [];
+                var seen = new Set();
+
+                function measure(el) {
+                    if (seen.has(el)) {
+                        return null;
+                    }
+                    seen.add(el);
+                    var rect = el.getBoundingClientRect();
+                    var height = rect.height;
+                    if (height < 1) {
+                        return null;
+                    }
+                    return {
+                        top: rect.top - containerRect.top,
+                        bottom: rect.bottom - containerRect.top,
+                        height: height
+                    };
+                }
+
+                function addUnit(el) {
+                    var unit = measure(el);
+                    if (unit) {
+                        units.push(unit);
+                    }
+                }
+
+                function addLines(el) {
+                    measureLines(el, containerRect).forEach(function (line) {
+                        units.push(line);
+                    });
+                }
+
+                function processNode(node) {
+                    if (node.nodeType !== 1) {
+                        return;
+                    }
+                    var tag = node.tagName.toLowerCase();
+
+                    if (tag === "table") {
+                        var tableUnit = measure(node);
+                        if (tableUnit && tableUnit.height <= maxPageHeight) {
+                            addUnit(node);
+                        } else {
+                            node.querySelectorAll("tr").forEach(addUnit);
+                        }
+                        return;
+                    }
+                    if (tag === "ul" || tag === "ol") {
+                        Array.prototype.forEach.call(node.children, function (child) {
+                            if (child.tagName.toLowerCase() === "li") {
+                                addLines(child);
+                            }
+                        });
+                        return;
+                    }
+                    if (PDF_LINE_TAGS[tag]) {
+                        addLines(node);
+                        return;
+                    }
+                    if (PDF_ATOMIC_TAGS[tag]) {
+                        addUnit(node);
+                        return;
+                    }
+                    Array.prototype.forEach.call(node.children, processNode);
+                }
+
+                Array.prototype.forEach.call(container.children, processNode);
+                units.sort(function (a, b) {
+                    return a.top - b.top;
+                });
+                return units;
+            }
+
+            function computePageStarts(totalHeight, pageHeight, units) {
+                var starts = [0];
+                var offsetY = 0;
+
+                while (offsetY + pageHeight < totalHeight - 0.5) {
+                    var pageEnd = offsetY + pageHeight;
+                    var nextStart = pageEnd;
+
+                    for (var i = 0; i < units.length; i++) {
+                        var unit = units[i];
+                        // Only break when a unit crosses the page boundary
+                        if (unit.top >= pageEnd - 0.5 || unit.bottom <= pageEnd + 0.5) {
+                            continue;
+                        }
+                        if (unit.top > offsetY + 1) {
+                            nextStart = Math.min(nextStart, unit.top);
+                        } else {
+                            nextStart = pageEnd;
+                        }
+                    }
+
+                    if (nextStart <= offsetY + 1) {
+                        nextStart = pageEnd;
+                    }
+                    starts.push(nextStart);
+                    offsetY = nextStart;
+                }
+
+                return starts;
+            }
+
+            function exportPdf(editor, fileName) {
+                var container = buildPdfContainer(getSanitizedHtml(editor));
+                document.body.appendChild(container);
+
+                return waitForLayout()
+                    .then(function () { return waitForImages(container); })
+                    .then(function () {
+                        var pdf = new jsPDF("p", "pt", "a4");
+                        var pageWidth = pdf.internal.pageSize.getWidth();
+                        var pageHeight = pdf.internal.pageSize.getHeight();
+                        var contentWidth = pageWidth - PDF_MARGIN * 2;
+                        var contentHeight = pageHeight - PDF_MARGIN * 2;
+                        var pageContentHeightCss = contentHeight * container.scrollWidth / contentWidth;
+                        var units = collectPageUnits(container, pageContentHeightCss);
+                        var pageStarts = computePageStarts(container.scrollHeight, pageContentHeightCss, units);
+                        var html2canvasOptions = {
+                            scale: PDF_CANVAS_SCALE,
+                            useCORS: true,
+                            logging: false,
+                            backgroundColor: "#ffffff",
+                            scrollX: 0,
+                            scrollY: 0,
+                            ignoreElements: function (el) {
+                                return typeof el.shadowRoot === "object" && el.shadowRoot !== null;
+                            }
+                        };
+
+                        var chain = Promise.resolve();
+                        for (var i = 0; i < pageStarts.length; i++) {
+                            (function (pageIndex) {
+                                chain = chain.then(function () {
+                                    var startCss = pageStarts[pageIndex];
+                                    var endCss = pageIndex + 1 < pageStarts.length
+                                        ? pageStarts[pageIndex + 1]
+                                        : container.scrollHeight;
+                                    var sliceHeightCss = endCss - startCss;
+
+                                    var pageWrapper = document.createElement("div");
+                                    pageWrapper.style.cssText = [
+                                        "position:fixed",
+                                        "left:0",
+                                        "top:0",
+                                        "width:" + container.scrollWidth + "px",
+                                        "height:" + sliceHeightCss + "px",
+                                        "overflow:hidden",
+                                        "background:#fff",
+                                        "z-index:2147483647",
+                                        "pointer-events:none"
+                                    ].join(";");
+
+                                    var sliceContent = container.cloneNode(true);
+                                    sliceContent.style.marginTop = -startCss + "px";
+                                    pageWrapper.appendChild(sliceContent);
+                                    document.body.appendChild(pageWrapper);
+
+                                    return waitForLayout().then(function () {
+                                        return html2canvas(pageWrapper, Object.assign({}, html2canvasOptions, {
+                                            width: pageWrapper.offsetWidth,
+                                            height: pageWrapper.offsetHeight,
+                                            windowWidth: pageWrapper.offsetWidth,
+                                            windowHeight: pageWrapper.offsetHeight
+                                        }));
+                                    }).then(function (pageCanvas) {
+                                        if (pageIndex > 0) {
+                                            pdf.addPage();
+                                        }
+                                        var slicePdfHeight = sliceHeightCss * contentWidth / container.scrollWidth;
+                                        pdf.addImage(
+                                            pageCanvas.toDataURL("image/jpeg", 0.92),
+                                            "JPEG",
+                                            PDF_MARGIN,
+                                            PDF_MARGIN,
+                                            contentWidth,
+                                            slicePdfHeight
+                                        );
+                                    }).finally(function () {
+                                        document.body.removeChild(pageWrapper);
+                                    });
+                                });
+                            })(i);
+                        }
+
+                        return chain.then(function () {
+                            pdf.save(fileName);
+                        });
+                    })
+                    .finally(function () {
+                        document.body.removeChild(container);
+                    });
+            }
+
+            function exportHtml(editor, fileName) {
+                var cleanHtml = getSanitizedHtml(editor);
+                var title = fileName.replace(/\.html$/, "");
+                var fullHtml = [
+                    "<!DOCTYPE html>",
+                    "<html lang=\"en\">",
+                    "<head>",
+                    "<meta charset=\"UTF-8\">",
+                    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+                    "<title>", DOMPurify.sanitize(title), "</title>",
+                    "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/highlight.js/latest/styles/github.min.css\">",
+                    "<style>",
+                    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#24292e}",
+                    "pre{white-space:pre-wrap;overflow-x:auto}",
+                    "code{font-family:Menlo,'Droid Sans Mono',Consolas,monospace}",
+                    "img{max-width:100%;height:auto}",
+                    "table{border-collapse:collapse;width:100%}",
+                    "th,td{border:1px solid #dfe2e5;padding:6px 13px}",
+                    "</style>",
+                    "</head>",
+                    "<body>",
+                    cleanHtml,
+                    "</body>",
+                    "</html>"
+                ].join("\n");
+                downloadBlob(fullHtml, fileName, "text/html;charset=utf-8");
+                return Promise.resolve();
             }
         </script>
 
